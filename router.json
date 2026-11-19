@@ -1,0 +1,16 @@
+{
+  "local": {
+    "model": "lmstudio/local"
+  },
+  "copilot": {
+    "model": "github-copilot/claude-opus-5.5"
+  },
+  "claude": {
+    "model": "opus",
+    "allowedTools": [
+      "Read",
+      "Grep",
+      "Glob"
+    ]
+  }
+}

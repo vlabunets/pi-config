@@ -1,0 +1,23 @@
+{
+  "$schema": "https://pi.dev/schemas/models.schema.json",
+  "providers": {
+    "lmstudio": {
+      "baseUrl": "http://localhost:1234/v1",
+      "api": "openai-completions",
+      "apiKey": "lm-studio",
+      "models": [
+        {
+          "id": "local",
+          "name": "Local default → qwen/qwen3.8-27b",
+          "samplingParams": { "model": "qwen/qwen3.8-27b" },
+          "reasoning": true,
+          "input": ["text", "image"],
+          "contextWindow": 60000
+        },
+        { "id": "qwen/qwen3.8-27b", "name": "Qwen 3.8 27B (local)", "reasoning": true, "input": ["text", "image"], "contextWindow": 60000 },
+        { "id": "muse-glimmer-30b", "name": "Muse Glimmer 30B (local)", "input": ["text", "image"], "contextWindow": 131072 },
+        { "id": "qwen2.5-coder-1.5b-mlx", "name": "Qwen 2.5 Coder 1.5B (local)", "contextWindow": 32768 }
+      ]
+    }
+  }
+}

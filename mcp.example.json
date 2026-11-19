@@ -1,0 +1,70 @@
+{
+  "mcpServers": {
+    "angular-cli": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@angular/cli",
+        "mcp"
+      ]
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest"
+      ]
+    },
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "!printf 'Bearer %s' \"$(security find-generic-password -s github-mcp-token -w)\""
+      }
+    },
+    "atlassian": {
+      "type": "http",
+      "url": "https://mcp.atlassian.com/v2/mcp"
+    },
+    "chrome-devtools": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "chrome-devtools-mcp@latest"
+      ]
+    },
+    "figma": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "figma-developer-mcp",
+        "--stdio",
+        "--image-dir=<ABSOLUTE_PATH_FOR_FIGMA_IMAGES>"
+      ],
+      "env": {
+        "FIGMA_API_KEY": "!security find-generic-password -s figma-api-key -w",
+        "DO_NOT_TRACK": "1"
+      }
+    },
+    "sonarqube": {
+      "type": "stdio",
+      "command": "java",
+      "args": [
+        "-jar",
+        "~/.pi/agent/mcp-servers/sonarqube/sonarqube-mcp-server.jar"
+      ],
+      "env": {
+        "STORAGE_PATH": "${HOME}/.pi/agent/mcp-servers/sonarqube/storage",
+        "SONARQUBE_TOKEN": "!security find-generic-password -s sonarqube-mcp -w",
+        "SONARQUBE_ORG": "<your-sonarcloud-org>",
+        "SONARQUBE_PROJECT_KEY": "<your-project-key>",
+        "SONARQUBE_READ_ONLY": "true"
+      },
+      "description": "SonarQube Cloud code quality data (issues, quality gates, coverage, hotspots) for project <your-project-key>. Pass projectKey or projectKeys wherever a tool accepts it: issue search without it covers the whole <your-sonarcloud-org> organization."
+    }
+  }
+}

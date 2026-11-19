@@ -1,0 +1,1 @@
+../agent-presets/scout.local.md

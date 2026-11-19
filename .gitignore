@@ -1,0 +1,44 @@
+# This repo lives in ~/.pi/agent next to credentials and runtime state.
+# Allow-list: ignore everything at the top level, then re-include what is published.
+# A new top-level file stays private unless it is added below.
+/*
+!/.gitignore
+!/LICENSE
+!/NOTICE.md
+!/README.md
+!/AGENTS.md
+!/settings.json
+!/models.json
+!/router.json
+!/mcp.example.json
+!/agents/
+!/agent-presets/
+!/extensions/
+!/skills/
+
+# Kept private on purpose (already excluded by /* above, listed for clarity):
+#   auth.json, mcp-auth.json   credentials
+#   mcp.json, trust.json       work-specific servers, project paths (see mcp.example.json)
+#   models-store.json          provider catalog cache
+#   sessions/ install/ npm/ git/ bin/ pi-web/ session-status/ mcp-servers/
+#   *.sqlite*, *.log           runtime state
+
+# Anywhere in the tree
+**/auth.json
+**/mcp-auth.json
+**/config.json
+.env
+.env.*
+*.bak-*
+*.bak
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.memory/
+coverage/
+dist/
+*.tsbuildinfo
+*.log
+.DS_Store
+Thumbs.db

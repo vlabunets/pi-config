@@ -1,0 +1,37 @@
+{
+  "$schema": "https://pi.dev/schemas/settings.schema.json",
+  "lastChangelogVersion": "1.5.2",
+  "theme": "dark",
+  "defaultProvider": "lmstudio",
+  "defaultModel": "local",
+  "defaultThinkingLevel": "medium",
+  "modelThinkingLevels": {
+    "github-copilot/claude-opus-5.5": "high",
+    "github-copilot/claude-sonnet-5.5": "medium",
+    "github-copilot/claude-haiku-5.5": "low",
+    "github-copilot/gpt-6.1-sol": "high"
+  },
+  "defaultTools": ["+codemode"],
+  "packages": [
+    "npm:@ygncode/pi-web@beta",
+    "git:github.com/MasuRii/pi-session-cleanup"
+  ],
+  "extensionChangelogVersions": {
+    "{\"source\":\"git:github.com/MasuRii/pi-session-cleanup\",\"scope\":\"user\"}": "1.2.0"
+  },
+  "observational-memory": {
+    "models": {
+      "observer": {
+        "provider": "lmstudio",
+        "id": "local",
+        "thinking": "low"
+      },
+      "consolidator": {
+        "provider": "github-copilot",
+        "id": "claude-haiku-5.5",
+        "thinking": "medium"
+      }
+    },
+    "observerConcurrency": 1
+  }
+}
