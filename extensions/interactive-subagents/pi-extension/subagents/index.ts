@@ -1261,6 +1261,15 @@ async function launchSubagent(
       cmdParts.push("--model", shellEscape(effectiveModel));
     }
 
+    // Map pi thinking levels onto Claude Code's --effort (low|medium|high|xhigh|max).
+    const claudeEffort: Record<string, string> = {
+      minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max",
+    };
+    const effort = effectiveThinking ? claudeEffort[effectiveThinking.toLowerCase()] : undefined;
+    if (effort) {
+      cmdParts.push("--effort", effort);
+    }
+
     const sp = agentDefs.body;
     if (sp) {
       cmdParts.push("--append-system-prompt", shellEscape(sp));

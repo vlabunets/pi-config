@@ -1,6 +1,6 @@
 {
   "$schema": "https://pi.dev/schemas/settings.schema.json",
-  "lastChangelogVersion": "1.5.2",
+  "lastChangelogVersion": "1.6.1",
   "theme": "dark",
   "defaultProvider": "lmstudio",
   "defaultModel": "local",
@@ -11,10 +11,13 @@
     "github-copilot/claude-haiku-5.5": "low",
     "github-copilot/gpt-6.1-sol": "high"
   },
-  "defaultTools": ["+codemode"],
+  "defaultTools": [
+    "+codemode"
+  ],
   "packages": [
     "npm:@ygncode/pi-web@beta",
-    "git:github.com/MasuRii/pi-session-cleanup"
+    "git:github.com/MasuRii/pi-session-cleanup",
+    "npm:@casualjim/pi-caveman"
   ],
   "extensionChangelogVersions": {
     "{\"source\":\"git:github.com/MasuRii/pi-session-cleanup\",\"scope\":\"user\"}": "1.2.0"

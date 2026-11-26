@@ -36,8 +36,8 @@ My [pi](https://github.com/earendil-works/pi) agent directory (`~/.pi/agent`): a
 
 ### Subagents
 
-- `agents/` — `claude-worker` (Claude Code CLI implementer), `reviewer` (pre-PR reviewer, read-only), `scout` (recon)
-- `agent-presets/` — `scout.local` (LM Studio) and `scout.pro` (Copilot) variants; switch by symlinking over `agents/scout.md`
+- `agents/` — `worker` (default implementer, overrides the bundled one; Copilot GPT-6.2 Sol), `claude-worker` (Claude Code CLI implementer), `reviewer` (pre-PR reviewer, read-only), `scout` (recon)
+- `agent-presets/` — scout variants: `scout.local` (LM Studio), `scout.gpt` (Copilot GPT-6 Luna), `scout.mai` (Copilot MAI Code 2 Flash), `scout.claude` (Copilot Claude Haiku 5.5); switch with `pi-preset-scout <name>`, which symlinks the chosen file over `agents/scout.md`
 
 ### Prompt snippets
 
@@ -51,6 +51,7 @@ angular-cli, playwright, chrome-devtools, github, atlassian, figma, sonarqube (l
 
 - `npm:@ygncode/pi-web@beta` — web UI (`bin/pi-web`, `bin/pi-web-ctl`)
 - `git:github.com/MasuRii/pi-session-cleanup` — session cleanup
+- `npm:@casualjim/pi-caveman` — caveman skills (`caveman`, `caveman-commit`, `caveman-review`, `caveman-compress`, `caveman-help`, `caveman-stats`, `cavecrew`) + extension that turns on caveman `full` mode at session start by default; disabled here via `~/.config/pi-caveman/config.json` → `{"defaultMode": "off"}` (or `CAVEMAN_DEFAULT_MODE=off`), turn on with `/skill:caveman full`
 
 ## Setup
 

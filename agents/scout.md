@@ -1,1 +1,1 @@
-../agent-presets/scout.local.md
+../agent-presets/scout.mai.md

@@ -1,0 +1,4 @@
+!!pi-preset-scout gpt      # switch; output is NOT added to the model's context
+!!pi-preset-scout          # show current preset + available ones
+!pi-preset-scout local     # switch AND let the model see the output
+# presets: local (LM Studio) | gpt (gpt-6-luna) | mai (mai-code-2-flash) | claude (claude-haiku-5.5)

@@ -1,8 +1,8 @@
 ---
 name: scout
-description: Fast codebase recon — explores files, finds patterns, maps architecture (pro preset)
+description: Fast codebase recon — explores files, finds patterns, maps architecture (mai preset)
 tools: read, grep, find, ls
-model: github-copilot/gpt-6-luna
+model: github-copilot/mai-code-2-flash
 thinking: low
 system-prompt: append
 auto-exit: true

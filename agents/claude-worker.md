@@ -2,6 +2,7 @@
 name: claude-worker
 description: Implementer that runs in the Claude Code CLI (Opus) — for larger code changes, refactors, and multi-file work
 model: opus
+thinking: high
 cli: claude
 auto-exit: true
 ---

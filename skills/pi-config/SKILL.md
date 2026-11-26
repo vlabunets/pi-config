@@ -32,7 +32,7 @@ Map task → doc: settings keys → `settings.md`; extension API/events/`ctx.ui`
 | `extensions/<name>/` | dir extensions: `index.ts` or `package.json` with `pi.extensions` | own `node_modules` |
 | `extensions/{interactive-subagents,observational-memory}` | vendored MIT code (see `NOTICE.md`) | keep their `LICENSE`; pull upstream changes by hand |
 | `skills/<name>/SKILL.md` | skills | |
-| `agents/*.md`, `agent-presets/*.md` | subagent definitions (frontmatter: name, description, tools, model, thinking, …) | presets = variants (`.local` / `.pro`) |
+| `agents/*.md`, `agent-presets/*.md` | subagent definitions (frontmatter: name, description, tools, model, thinking, …) | presets = variants (`.local` / `.gpt` / `.mai` / `.claude`), switched by `pi-preset-scout` |
 | `extensions/prompt-snippets/snippets/*.md` | toggleable rules (`alt+s`) | frontmatter: name, description, placement, order |
 | `mcp-servers/` | local MCP server binaries (sonarqube jar) | |
 | `npm/`, `git/` | installed `packages` from settings | managed by `pi install` — don't edit |
