@@ -1,126 +1,140 @@
 ---
 name: pdf-reader
-description: Read and comprehend PDF files, especially math lecture notes and academic papers. Use when the user asks to read, parse, analyze, or extract content from a PDF file.
+description: "Read a local PDF file (lecture notes, papers, slides, scans, forms, CAD drawings and plans) into the conversation: size it up, pull the text, find pages, and render the pages whose equations, figures, tables, signatures, scans or unextractable labels don't survive text extraction, cropping large sheets into readable tiles. Use when the user gives a .pdf path or asks to read, summarize, search, or explain something in a PDF on disk. For a PDF at a URL, use fetch_content instead."
 ---
 
-# PDF Reader
+# Reading local PDFs
 
-Read and comprehend PDF files, especially math lecture notes and academic papers. Uses a hybrid text extraction + vision approach for maximum comprehension of equations, diagrams, and structured content.
+Everything runs on Poppler (`brew install poppler`); the one script is
+standard-library Python. Paths below are relative to this skill's directory.
 
-## Setup
+A PDF at a URL is not this skill's job: `fetch_content` fetches and converts it.
 
-All scripts use a venv at `SKILL_DIR/.venv` with `pymupdf` installed. If the venv is missing, create it from `requirements.txt`:
+## 1. Size it up
 
 ```bash
-python3 -m venv SKILL_DIR/.venv
-SKILL_DIR/.venv/bin/pip install -r SKILL_DIR/requirements.txt
+python3 scripts/triage.py <file.pdf>                  # whole document
+python3 scripts/triage.py <file.pdf> --pages 10-20    # part of it
 ```
 
-**Python command:** Always invoke scripts with:
-```
-SKILL_DIR/.venv/bin/python SKILL_DIR/scripts/<script>.py [args]
-```
+It prints the page count, the outline (bookmarks with page numbers, when the
+PDF has them), and one row per page:
 
-## Scripts
+| Column | Meaning |
+|---|---|
+| `chars` | characters of extractable text |
+| `math` | share of math symbols in that text |
+| `eqs` | numbered display equations, like `… (3.2)` |
+| `figs` | lines that start a caption: `Figure 3`, `Table 2`, … |
+| `imgs` | images covering at least 5% of the page (logos don't count) |
+| `render` | `yes (scan / images / unreadable text / figure / math)`, or `sparse` for pages with little text |
 
-All scripts are in `SKILL_DIR/scripts/`.
+Then a `Render:` line with the pages to look at as images. The other pages read
+fine as text.
 
-| Script | Purpose | Key args |
-|---|---|---|
-| `pdf_info.py <path>` | Metadata + per-page analysis (page count, TOC, text density, math density, image count) | — |
-| `pdf_extract.py <path> [--pages SPEC]` | Extract text by page | `--pages all\|1-5\|1,3,7\|3` |
-| `pdf_render.py <path> [--pages SPEC] [--dpi N]` | Render pages to PNG images in `/tmp/pi-pdf-*/` | `--pages`, `--dpi` (default 150) |
-| `pdf_search.py <path> <query> [--context N] [--literal]` | Search text content by regex or literal | `--context` lines (default 3), `--literal` flag |
+The flags are a starting point. **The user's question decides.** "Is it
+signed?", "fill in this form", "what does the diagram show", or "check this
+table" means rendering those pages even when the row says `-`: signatures,
+handwriting and vector drawings are invisible to the script, and tables lose
+their columns in text.
 
-Page specs: `all`, `1-5`, `1,3,7`, `3` (1-indexed, inclusive ranges).
+Warnings the script may print first:
 
-## Strategy: How to Read a PDF
+- **Looks scanned**: pages are images with no text. Render what you need and
+  read the images; there is no OCR here.
+- **Some text can't be extracted**: the page uses fonts with no Unicode map
+  (common in CAD exports). Its labels and headings are visible only in a render,
+  and `--find` won't see them.
+- **Large pages**: bigger than A3, such as drawings and plans. See
+  [Large pages](#large-pages).
+- **Most pages have little text**: slides, a form, or near-empty pages. Render
+  one `sparse` page to see which before rendering more.
 
-### Step 1: Always Triage First
+## 2. Get the text
 
-Run `pdf_info.py` on every new PDF before doing anything else. This tells you:
-- How many pages (determines strategy)
-- Whether there's a TOC (enables structural navigation)
-- Per-page math density and image count (identifies which pages need vision)
-- Per-page text length (spots pages that are mostly diagrams/figures)
-
-### Step 2: Pick a Strategy Based on Size and Content
-
-#### Short PDFs (≤15 pages)
-- Extract all text: `pdf_extract.py <path>`
-- Render all pages: `pdf_render.py <path>`
-- Read all rendered images with the `read` tool for full visual comprehension
-- This gives complete understanding at reasonable token cost
-
-#### Medium PDFs (15–60 pages)
-- Extract all text first (cheap, gives structural overview)
-- Check `pdf_info.py` output for pages with high `math_density` (>0.02) or `image_count` > 0 or low `text_length` (<100, likely diagram-only pages)
-- Render only those math/diagram-heavy pages as images
-- Read those images with `read` for equation and figure comprehension
-- For the rest, text extraction is sufficient
-
-#### Long PDFs (60+ pages)
-- Extract text for a structural overview — focus on TOC and section headers
-- Do NOT render all pages (too many tokens)
-- For targeted questions: use `pdf_search.py` to find relevant pages, then render those
-- For full comprehension: work section by section, summarizing as you go
-- Warn the user about scope — offer to focus on specific sections
-
-### Step 3: Targeted Lookups
-
-When the user asks about something specific (e.g., "check theorem 3.2", "what's on page 7"):
-1. `pdf_search.py <path> "theorem 3.2"` — find the page
-2. `pdf_render.py <path> --pages <page>` — render just that page
-3. `read` the image — see the actual theorem with proper math rendering
-4. If context is needed, extract text from surrounding pages
-
-### Step 4: Visual Reading Guidelines
-
-When reading rendered page images:
-- **150 DPI** (default) is good for most math and text
-- **200 DPI** if equations are small, dense, or hard to read at 150
-- **100 DPI** only for quick structural scanning (saves tokens)
-- State equations explicitly in your response using LaTeX notation when discussing them
-- Describe diagrams and figures in detail — the user may not be looking at the PDF simultaneously
-- Note page numbers when referencing content so the user can find it
-
-### Step 5: What to Watch For
-
-- **Pages with low text_length but high image_count**: likely full-page diagrams or figures — always render these
-- **Pages with high math_density**: equations that text extraction will mangle — always render these
-- **Pages with decent text but zero math**: text extraction alone is fine, skip rendering
-- **TOC entries**: use these to navigate structurally rather than reading linearly
-
-## Common Patterns
-
-### "Read this PDF" (full document)
-```
-1. pdf_info.py → assess size and content
-2. Pick strategy (short/medium/long)
-3. Extract text + selectively render
-4. Provide summary with key findings
+```bash
+pdftotext -layout -f 4 -l 7 <file.pdf> -    # pages 4 to 7 to stdout
+pdftotext -layout <file.pdf> -              # everything (check the size first)
 ```
 
-### "What does theorem X say?"
-```
-1. pdf_search.py → find the page
-2. pdf_render.py → render that page (and maybe the next for proof continuation)
-3. Read the image, state the theorem precisely
+`-layout` keeps columns and display equations on their own lines. Drop it for
+flowing prose that you want as plain paragraphs.
+
+## 3. Find something
+
+```bash
+python3 scripts/triage.py <file.pdf> --find "theorem 3\.2"      # regex, case-insensitive
+python3 scripts/triage.py <file.pdf> --find "f(x) = " --literal
 ```
 
-### "Explain the proof on page N"
-```
-1. pdf_render.py --pages N → render the page
-2. Read the image for full visual comprehension
-3. Also extract text from pages N-1 and N+1 for surrounding context
-4. Walk through the proof step by step
+Each hit prints as `p<page>: <line>`. Formulas extract oddly (subscripts
+flatten, fractions split across lines), so search for the words around a
+formula, not the formula.
+
+## 4. Render and look
+
+```bash
+out=$(mktemp -d -t pdf-pages)
+pdftoppm -png -r 120 -f 4 -l 5 <file.pdf> "$out/p"     # → $out/p-04.png, $out/p-05.png
 ```
 
-### "Summarize this paper"
-```
-1. pdf_info.py → get TOC and page count
-2. pdf_extract.py → full text extraction
-3. Read abstract, intro, conclusion first (text is usually sufficient)
-4. Render figures/theorem pages as needed for deeper understanding
-5. Provide structured summary
-```
+Then `read` each PNG. Pick the resolution for what you need from the page:
+
+| `-r` | Use for |
+|---|---|
+| 60–75 | layout only: is it signed, which boxes are filled, what kind of page |
+| 100–120 | normal text, tables, figures |
+| 150 | dense equations, sub/superscripts, small print |
+
+Higher resolutions cost more tokens per page. Images larger than about 1600 px
+on the long side get scaled down before you see them, so a higher `-r` on a big
+page buys nothing. Render only the pages you need, and delete `$out` when you
+are done.
+
+### Large pages
+
+An A1 drawing at 120 dpi is about 3900 × 2800 px. Scaled down to fit, its
+dimensions and labels turn into specks. Read it in two passes:
+
+1. **Overview**: `pdftoppm -png -scale-to 1400 -f 2 -l 2 <file.pdf> "$out/p"`
+   to see the layout and decide which areas matter.
+2. **Detail**: crop tiles at full resolution. The script prints the commands:
+
+   ```bash
+   python3 scripts/triage.py <file.pdf> --tiles 2              # 3x2 grid, 150 dpi
+   python3 scripts/triage.py <file.pdf> --tiles 2 --grid 4x3   # smaller labels
+   ```
+
+   Run the printed lines (they create their own `$out`) and `read` only the
+   tiles you need. Tiles overlap by 5%, so a label on a seam shows up whole in
+   one of them. Aim for tiles of at most ~1600 px; raise the grid, not the dpi.
+
+## How to read by size
+
+- **Up to ~15 pages**: text for everything, render what `Render:` lists.
+- **15–60 pages**: text for everything, render only the flagged pages that
+  matter to the question.
+- **More than 60 pages**: don't pull the whole text. Use the outline and
+  `--find` to locate sections, then text and render just those. Tell the user
+  what you covered.
+
+## Math notes and papers
+
+- Text extraction loses the structure of formulas. Before stating or explaining
+  a formula, read it from the rendered page.
+- Write formulas in LaTeX in your answer, and give the page number (and the
+  equation or theorem number) so the user can check.
+- A proof often runs onto the next page: render or extract that page too.
+- Describe figures and diagrams in words; the user may not have the PDF open.
+
+## When it fails
+
+- `missing Poppler tools`: `brew install poppler`.
+- `PDF is encrypted`: ask the user for an unlocked copy. Poppler's tools also
+  take `-upw <password>` if they give you one.
+- Garbled text everywhere (odd symbols, letters out of order): the PDF uses
+  fonts without a usable text mapping that the script didn't catch. Treat it
+  like a scan and render.
+- Poppler prints `Syntax Error: Unknown character collection …` lines: harmless
+  noise from fonts without a Unicode map. The script hides them; the plain
+  `pdftotext`/`pdftoppm` commands don't.

@@ -216,9 +216,13 @@ function getToolExtensionPath(tool: string): string | undefined {
     return fileURLToPath(import.meta.url);
   }
   const extBase = join(getAgentConfigDir(), "extensions");
+  // Web tools come from the `npm:pi-web-access` package (installed by `pi install`).
+  const webAccess = join(getAgentConfigDir(), "npm", "node_modules", "pi-web-access");
   const map: Record<string, string> = {
-    web_search: join(extBase, "web-search", "index.ts"),
-    web_fetch: join(extBase, "web-fetch", "index.ts"),
+    web_search: webAccess,
+    fetch_content: webAccess,
+    get_search_content: webAccess,
+    source_check: webAccess,
     video_extract: join(extBase, "video-extract", "index.ts"),
     youtube_search: join(extBase, "youtube-search", "index.ts"),
     google_image_search: join(extBase, "google-image-search", "index.ts"),

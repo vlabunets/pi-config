@@ -12,27 +12,20 @@ My [pi](https://github.com/earendil-works/pi) agent directory (`~/.pi/agent`): a
 
 ### Extensions
 
-- `ask-user-question.ts` — the agent asks you a question through a UI popup; popups from different extensions serialize via a shared UI lock
-- `bash-guard/` — hooks that catch dangerous bash commands before they run, with an on/off toggle
-- `browser/` — Playwright-driven headless Chromium the agent can drive (navigate, eval JS, inspect network/console, click, screenshot); off by default, enable with `/browser on`
-- `custom-header.ts` — the big capital Π header
 - `interactive-subagents/` — async, interactive subagents in Rex / tmux panes; vendored from [pi-interactive-subagents](https://github.com/amosblomqvist/pi-interactive-subagents) with local changes (Rex integration, custom loadouts)
 - `observational-memory/` — tiered session memory with deterministic compaction (`/om on`); vendored from [pi-observational-memory](https://github.com/amosblomqvist/pi-observational-memory)
 - `prompt-snippets/` — small, reusable behavior rules toggled onto a message before sending (`alt+s`); reset after send
 - `router/` — `delegate` tool routing isolated tasks across `local`, `copilot`, and `claude` tiers
 - `tokyo-footer.ts` — custom Tokyo Night footer with context/cost stats and GitHub Copilot premium quota
-- `web-fetch/` — fetch a URL and get clean markdown
-- `web-search/` — keyless DuckDuckGo web search
 
 ### Skills
 
 - `analyze-sessions/` — Python scripts to query past pi sessions: cost rollups, prompt-pattern mining, session rendering
 - `obsidian-zettel-summary/` — save conversation summaries as atomic, linked Zettelkasten notes in Obsidian
 - `pi-config/` — develop and maintain this config: layout map, workflows for extensions/skills/MCP/models, and `scripts/check.sh` sanity checks
-- `pdf-reader/` — read PDFs (lecture notes, papers) into the context
+- `pdf-reader/` — read local PDFs (lecture notes, papers, scans, forms, CAD drawings): `scripts/triage.py` sizes a PDF up, says which pages to render, and crops large sheets into tiles; text, search and rendering use Poppler (`brew install poppler`)
 - `sonarqube-findings/` — collect SonarQube Cloud findings for a branch/PR (gate, issues, hotspots, coverage, or a local check), with severity mapping and triage rules; used by the `pre-pr-review` and `sonar-quality-gate` snippets
-- `web-debug/` — a playbook for debugging frontend issues with the browser extension's tools
-- `youtube-transcript/` — fetch a YouTube video's title and transcript as JSON
+- `web-debug/` — a playbook for debugging frontend issues through the `playwright` and `chrome-devtools` MCP servers
 
 ### Subagents
 
@@ -45,26 +38,24 @@ My [pi](https://github.com/earendil-works/pi) agent directory (`~/.pi/agent`): a
 
 ### MCP servers (`mcp.json`, not committed)
 
-angular-cli, playwright, chrome-devtools, github, atlassian, figma, sonarqube (local jar in `mcp-servers/sonarqube/`, read-only). `mcp.example.json` is the committed template: copy it to `mcp.json` and fill in the `<placeholders>`. Secrets are read from the macOS keychain via `!security find-generic-password …` commands, never stored inline. Store one with `security add-generic-password -s <service> -a "$USER" -w`.
+atlassian, figma, sonarqube (local jar in `mcp-servers/sonarqube/`, read-only), plus angular-cli, playwright, chrome-devtools and github, which are configured but `"enabled": false` so they don't start in every session; turn one on with `/mcp` when needed. `mcp.example.json` is the committed template: copy it to `mcp.json` and fill in the `<placeholders>`. Secrets are read from the macOS keychain via `!security find-generic-password …` commands, never stored inline. Store one with `security add-generic-password -s <service> -a "$USER" -w`.
 
 ### Packages (`settings.json` → `packages`)
 
 - `npm:@ygncode/pi-web@beta` — web UI (`bin/pi-web`, `bin/pi-web-ctl`)
 - `git:github.com/MasuRii/pi-session-cleanup` — session cleanup
 - `npm:@casualjim/pi-caveman` — caveman skills (`caveman`, `caveman-commit`, `caveman-review`, `caveman-compress`, `caveman-help`, `caveman-stats`, `cavecrew`) + extension that turns on caveman `full` mode at session start by default; disabled here via `~/.config/pi-caveman/config.json` → `{"defaultMode": "off"}` (or `CAVEMAN_DEFAULT_MODE=off`), turn on with `/skill:caveman full`
+- `npm:pi-web-access` — `web_search`, `fetch_content`, `get_search_content`, `source_check`: keyless search (Exa, falling back to DuckDuckGo on quota, network or empty results via `searchRouting`), page/PDF/GitHub fetching, YouTube and video via Gemini. Config lives outside this repo: `~/.config/pi/web-search.json` when `XDG_CONFIG_HOME` is set (as here), else `~/.pi/agent/web-search.json`. It sets `toolActivation: "eager"` (so subagents with a `--tools` allowlist get the tools directly) and reads `geminiApiKey` from the keychain entry `gemini-api-key`. The free Gemini tier has no Google Search grounding quota, so Gemini is not in the search chain
+- `npm:pi-ask-user` — `ask_user` tool: questions with single/multi-select and free-form answers
+- `npm:cc-safety-net` — blocks destructive commands and secret-file access before a tool call runs; `/cc-safety-net` explains blocks, `npx cc-safety-net gui` tunes the rules
+- `npm:@dietrichgebert/ponytail` — "lazy senior dev" rules (write less code, reuse what exists) added to the system prompt; on by default in `full` mode. `/ponytail off|lite|full|ultra` per session, `/ponytail default <mode>` to persist (`~/.config/ponytail/config.json`); also `/ponytail-review`, `-audit`, `-debt`, `-gain`, `-help`
+- `npm:pi-lens` — LSP, linters and type-checkers run on every edit; blocking findings come back in the tool result. Auto-format and autofix are off globally in `~/.pi-lens/config.json` (not committed; a repo's `.pi-lens.json` can re-enable them). Tools it needs are auto-installed into `~/.pi-lens/`. `/lens-health`, `/lens-tools`, `/lens-toggle`
 
 ## Setup
 
-Extension-local npm deps: run `npm install` in `bash-guard/`, `browser/` (plus `npx playwright install chromium` once), `web-fetch/`, `interactive-subagents/`, `observational-memory/`.
+Extension-local npm deps: run `npm install` in `interactive-subagents/` and `observational-memory/`.
 
-System tools: `brew install yt-dlp ffmpeg` (youtube-transcript), Python 3 (youtube-transcript, analyze-sessions; stdlib only), Java (SonarQube MCP), Claude Code CLI (`claude-worker`, `claude` router tier), a `git-base-branch` script on `PATH` (`reviewer` agent, `pre-pr-review` snippet), the `obsidian` CLI (`obsidian-zettel-summary`).
-
-PDF reader venv:
-
-```bash
-python3 -m venv ~/.pi/agent/skills/pdf-reader/.venv
-~/.pi/agent/skills/pdf-reader/.venv/bin/pip install -r ~/.pi/agent/skills/pdf-reader/requirements.txt
-```
+System tools: `brew install yt-dlp ffmpeg` (pi-web-access video frames), Python 3 (analyze-sessions, pdf-reader; stdlib only), Poppler (`brew install poppler`; pdf-reader), Java (SonarQube MCP), Claude Code CLI (`claude-worker`, `claude` router tier), a `git-base-branch` script on `PATH` (`reviewer` agent, `pre-pr-review` snippet), the `obsidian` CLI (`obsidian-zettel-summary`).
 
 ## Git
 

@@ -52,14 +52,14 @@ Map task → doc: settings keys → `settings.md`; extension API/events/`ctx.ui`
 - Small → `extensions/<name>.ts`. Needs deps or multiple files → `extensions/<name>/index.ts` + `package.json` (`"type": "module"`, `"pi": {"extensions": ["./index.ts"]}`), then `npm install` in that dir.
 - Imports: `@earendil-works/pi-coding-agent` (ExtensionAPI, events), `@earendil-works/pi-tui`, `typebox` for tool params. These are host-provided: put them in `peerDependencies`/`devDependencies`, never `dependencies`.
 - Shape: `export default function (pi: ExtensionAPI) { pi.on(...); pi.registerTool({...}); pi.registerCommand(...) }`.
-- Use `ctx.ui.*` for interaction; respect the shared UI lock pattern from `ask-user-question.ts` if showing popups.
+- Use `ctx.ui.*` for interaction.
 - Long-lived resources (child processes, servers, watchers) must be cleaned up on `session_shutdown`.
 - Test in isolation first: `pi -e ./extensions/<name>.ts`, then `/reload` in the main session.
 - Typecheck if the dir has a `typecheck` script: `npm run typecheck`.
 
 ### Add a skill
 - `skills/<name>/SKILL.md`, frontmatter `name` (lowercase-hyphen, ≤64, match dir name) + `description` (≤1024: say **what** and **when**, include trigger phrases).
-- Bundle scripts under `scripts/`, refer to them by relative path. Python: stdlib only, or a skill-local `.venv` + `requirements.txt` (see `pdf-reader`).
+- Bundle scripts under `scripts/`, refer to them by relative path. Python: stdlib only (see `pdf-reader`, which shells out to CLI tools), or a skill-local `.venv` + `requirements.txt`.
 - `disable-model-invocation: true` for command-only skills.
 - Verify: `/reload`, then `/skill:<name>`.
 

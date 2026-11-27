@@ -1,6 +1,6 @@
 {
   "$schema": "https://pi.dev/schemas/settings.schema.json",
-  "lastChangelogVersion": "1.6.1",
+  "lastChangelogVersion": "1.7.0",
   "theme": "dark",
   "defaultProvider": "lmstudio",
   "defaultModel": "local",
@@ -17,10 +17,17 @@
   "packages": [
     "npm:@ygncode/pi-web@beta",
     "git:github.com/MasuRii/pi-session-cleanup",
-    "npm:@casualjim/pi-caveman"
+    "npm:@casualjim/pi-caveman",
+    "npm:pi-web-access",
+    "npm:pi-ask-user",
+    "npm:cc-safety-net",
+    "npm:@dietrichgebert/ponytail",
+    "npm:pi-lens"
   ],
   "extensionChangelogVersions": {
-    "{\"source\":\"git:github.com/MasuRii/pi-session-cleanup\",\"scope\":\"user\"}": "1.2.0"
+    "{\"source\":\"git:github.com/MasuRii/pi-session-cleanup\",\"scope\":\"user\"}": "1.2.0",
+    "{\"source\":\"npm:pi-web-access\",\"scope\":\"user\"}": "0.48.0",
+    "{\"source\":\"npm:pi-lens\",\"scope\":\"user\"}": "4.5.2"
   },
   "observational-memory": {
     "models": {
