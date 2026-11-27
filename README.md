@@ -25,7 +25,7 @@ My [pi](https://github.com/earendil-works/pi) agent directory (`~/.pi/agent`): a
 - `pi-config/` — develop and maintain this config: layout map, workflows for extensions/skills/MCP/models, and `scripts/check.sh` sanity checks
 - `pdf-reader/` — read local PDFs (lecture notes, papers, scans, forms, CAD drawings): `scripts/triage.py` sizes a PDF up, says which pages to render, and crops large sheets into tiles; text, search and rendering use Poppler (`brew install poppler`)
 - `sonarqube-findings/` — collect SonarQube Cloud findings for a branch/PR (gate, issues, hotspots, coverage, or a local check), with severity mapping and triage rules; used by the `/pre-pr-review` and `/sonar-quality-gate` templates
-- `web-debug/` — a playbook for debugging frontend issues through the `playwright` and `chrome-devtools` MCP servers
+- `web-debug/` — debug and verify web apps in a real browser via the `playwright` and `chrome-devtools` MCP servers: reproduce, then read console, network, storage/auth, DOM, rendering, Angular (`ng.*`) and performance evidence
 
 ### Subagents
 

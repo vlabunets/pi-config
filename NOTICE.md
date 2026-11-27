@@ -9,7 +9,6 @@ Source: <https://github.com/amosblomqvist/pi-config>. Author: Amos Blomqvist.
 The upstream repository has **no license file**. These files are derived from it, some of them modified, and are **not** covered by this repository's MIT license:
 
 - `skills/analyze-sessions/`
-- `skills/web-debug/`
 
 ## pi-interactive-subagents
 
