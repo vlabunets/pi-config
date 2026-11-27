@@ -1,325 +1,314 @@
-/**
- * Prompt Snippets — mix-and-match single-purpose prompt rules.
- *
- * Each snippet is a markdown file with frontmatter (name, description,
- * placement, order) stored in the `snippets/` directory next to this file.
- *
- * - Press alt+s or run /snippets to open the toggle menu (space: toggle,
- *   tab: preview, enter: apply, esc: cancel). The menu is a bordered,
- *   scrollable view.
- * - Active snippets appear as a widget above the editor, with prepend and
- *   append groups visually distinguished.
- * - When a message is sent, active snippet bodies are prepended/appended to
- *   the message text in order (prepend group sorted by `order` first, then
- *   the typed text, then the append group sorted by `order`).
- * - Toggles reset to all-off after each send and at session start.
- */
+// prompt-snippets: small behavior rules you add to one message or pin for the
+// whole session. Pick them with alt+s or /snippets, or type #tags in a message.
+//
+//   next message   sent as a separate context message after the one you send
+//   whole session  a system prompt section, patched in place when it changes
+//
+// Snippets: ./snippets/*.md, plus <project>/.pi/snippets/*.md in trusted projects.
 
-import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Key, matchesKey, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import {
+	CONFIG_DIR_NAME,
+	type ExtensionAPI,
+	type ExtensionContext,
+	getSettingsListTheme,
+} from "@earendil-works/pi-coding-agent";
+import {
+	type AutocompleteItem,
+	type Component,
+	Container,
+	fuzzyFilter,
+	type SettingItem,
+	SettingsList,
+	Text,
+} from "@earendil-works/pi-tui";
+import { extractTags, loadSnippets, messageRules, type Snippet, type Source, sessionRules, tagAtCursor } from "./core.ts";
 
-interface Snippet {
-	/** Filename, e.g. "concise.md" */
-	id: string;
-	name: string;
-	description: string;
-	placement: "prepend" | "append";
-	order: number;
-	body: string;
-}
+const GLOBAL_DIR = join(dirname(fileURLToPath(import.meta.url)), "snippets");
+const PIN_ENTRY = "prompt-snippets-pins"; // session entry: { pinned: string[] }
+const RULES_MESSAGE = "prompt-snippets"; // custom message carrying one message's rules
+const SECTION = "session-rules"; // system prompt section for pinned rules
+const WIDGET = "prompt-snippets";
 
-const extensionDir = dirname(fileURLToPath(import.meta.url));
-const snippetsDir = join(extensionDir, "snippets");
-const WIDGET_ID = "prompt-snippets";
+const OFF = "off";
+const NEXT = "next message";
+const SESSION = "whole session";
 
-function parseSnippet(filename: string, raw: string): Snippet | null {
-	const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-	if (!match) return null;
-
-	const meta: Record<string, string> = {};
-	for (const line of match[1].split(/\r?\n/)) {
-		const kv = line.match(/^([A-Za-z][\w-]*)\s*:\s*(.*)$/);
-		if (kv) meta[kv[1].toLowerCase()] = kv[2].trim().replace(/^["']|["']$/g, "");
-	}
-
-	const body = match[2].trim();
-	if (!body) return null;
-
-	const parsedOrder = Number.parseInt(meta.order ?? "", 10);
-	return {
-		id: filename,
-		name: meta.name || filename.replace(/\.md$/i, ""),
-		description: meta.description ?? "",
-		placement: meta.placement === "prepend" ? "prepend" : "append",
-		order: Number.isFinite(parsedOrder) ? parsedOrder : 9999,
-		body,
-	};
-}
-
-/** Load all snippets, sorted: prepend group first, append group last, each by (order, name). */
-function loadSnippets(): Snippet[] {
-	if (!existsSync(snippetsDir)) return [];
-	const snippets: Snippet[] = [];
-	for (const file of readdirSync(snippetsDir)) {
-		if (!file.toLowerCase().endsWith(".md")) continue;
-		try {
-			const snippet = parseSnippet(file, readFileSync(join(snippetsDir, file), "utf8"));
-			if (snippet) snippets.push(snippet);
-		} catch {
-			// Skip unreadable files
-		}
-	}
-	const byOrder = (a: Snippet, b: Snippet) => a.order - b.order || a.name.localeCompare(b.name);
-	return [
-		...snippets.filter((s) => s.placement === "prepend").sort(byOrder),
-		...snippets.filter((s) => s.placement === "append").sort(byOrder),
-	];
-}
-
-export default function (pi: ExtensionAPI) {
-	// Snippets last seen on disk (sorted). Refreshed whenever the menu opens or a message is sent.
+export default function promptSnippets(pi: ExtensionAPI) {
 	let snippets: Snippet[] = [];
-	// Ids of currently toggled snippets. Resets to empty after each send and at session start.
-	let enabled = new Set<string>();
+	const next = new Set<string>(); // for the next message only
+	let pinned = new Set<string>(); // for every turn of this session
+	let pending: Snippet[] = []; // chosen at input, sent at before_agent_start
+	const reported = new Set<string>(); // load errors already shown
 
-	function updateWidget(ctx: ExtensionContext) {
-		if (!ctx.hasUI || ctx.mode !== "tui") return;
-		const active = snippets.filter((s) => enabled.has(s.id));
-		const prepends = active.filter((s) => s.placement === "prepend");
-		const appends = active.filter((s) => s.placement === "append");
+	const find = (slug: string) => snippets.find((s) => s.slug === slug);
+	const present = (slugs: Iterable<string>) => [...slugs].map(find).filter((s): s is Snippet => !!s);
 
-		if (prepends.length === 0 && appends.length === 0) {
-			ctx.ui.setWidget(WIDGET_ID, undefined);
-			return;
+	function reload(ctx: ExtensionContext): void {
+		const dirs: { dir: string; source: Source }[] = [{ dir: GLOBAL_DIR, source: "global" }];
+		if (ctx.isProjectTrusted()) dirs.push({ dir: join(ctx.cwd, CONFIG_DIR_NAME, "snippets"), source: "project" });
+		const loaded = loadSnippets(dirs);
+		snippets = loaded.snippets;
+		for (const error of loaded.errors) {
+			if (reported.has(error)) continue;
+			reported.add(error);
+			if (ctx.hasUI) ctx.ui.notify(`prompt-snippets: ${error}`, "warning");
 		}
-
-		const theme = ctx.ui.theme;
-		const lines: string[] = [];
-		if (prepends.length > 0) {
-			lines.push(theme.fg("accent", `↑ prepend: ${prepends.map((s) => s.name).join(" · ")}`));
-		}
-		if (appends.length > 0) {
-			lines.push(theme.fg("warning", `↓ append: ${appends.map((s) => s.name).join(" · ")}`));
-		}
-		ctx.ui.setWidget(WIDGET_ID, lines);
+		for (const slug of next) if (!find(slug)) next.delete(slug);
 	}
 
-	async function openMenu(ctx: ExtensionContext) {
-		if (ctx.mode !== "tui") {
-			ctx.ui.notify("Snippet menu requires interactive mode", "warning");
+	function restorePins(ctx: ExtensionContext): void {
+		let latest: string[] = [];
+		for (const entry of ctx.sessionManager.getBranch()) {
+			if (entry.type === "custom" && entry.customType === PIN_ENTRY) {
+				const data = entry.data as { pinned?: unknown } | undefined;
+				latest = Array.isArray(data?.pinned) ? data.pinned.filter((s): s is string => typeof s === "string") : [];
+			}
+		}
+		pinned = new Set(latest);
+	}
+
+	function savePins(): void {
+		pi.appendEntry(PIN_ENTRY, { pinned: [...pinned].sort() });
+	}
+
+	function showWidget(ctx: ExtensionContext): void {
+		if (!ctx.hasUI) return;
+		const session = present(pinned);
+		const once = present(next);
+		if (!session.length && !once.length) {
+			ctx.ui.setWidget(WIDGET, undefined);
 			return;
 		}
-
-		snippets = loadSnippets();
-		// Drop toggles for snippets that no longer exist on disk.
-		enabled = new Set([...enabled].filter((id) => snippets.some((s) => s.id === id)));
-
-		if (snippets.length === 0) {
-			ctx.ui.notify(`No snippets found in ${snippetsDir}`, "warning");
-			updateWidget(ctx);
-			return;
-		}
-
-		// Working copy; only committed to `enabled` on confirm.
-		const working = new Set(enabled);
-
-		const confirmed = await ctx.ui.custom<boolean>((tui, theme, _keybindings, done) => {
-			const prepends = snippets.filter((s) => s.placement === "prepend");
-			const appends = snippets.filter((s) => s.placement === "append");
-			const items = [...prepends, ...appends];
-
-			let mode: "list" | "preview" = "list";
-			let cursor = 0;
-			let listScroll = 0;
-			let previewScroll = 0;
-
-			const itemRow = (snippet: Snippet, idx: number, width: number): string => {
-				const pointer = idx === cursor ? theme.fg("accent", "> ") : "  ";
-				const checkbox = working.has(snippet.id) ? theme.fg("success", "[x]") : theme.fg("dim", "[ ]");
-				const desc = snippet.description ? theme.fg("dim", ` — ${snippet.description}`) : "";
-				return truncateToWidth(`${pointer}${checkbox} ${theme.bold(snippet.name)}${desc}`, width);
-			};
-
-			/** List rows with the item index each row corresponds to (null for headers/blanks). */
-			const buildListRows = (width: number): { text: string; itemIndex: number | null }[] => {
-				const rows: { text: string; itemIndex: number | null }[] = [];
-				rows.push({ text: theme.fg("dim", "↑ PREPEND — added before your message"), itemIndex: null });
-				prepends.forEach((s, i) => rows.push({ text: itemRow(s, i, width), itemIndex: i }));
-				rows.push({ text: "", itemIndex: null });
-				rows.push({ text: theme.fg("dim", "↓ APPEND — added after your message"), itemIndex: null });
-				appends.forEach((s, i) => rows.push({ text: itemRow(s, prepends.length + i, width), itemIndex: prepends.length + i }));
-				return rows;
-			};
-
-			const buildPreviewRows = (snippet: Snippet, width: number): string[] => {
-				const rows: string[] = [];
-				rows.push(truncateToWidth(theme.bold(snippet.name), width));
-				rows.push(truncateToWidth(theme.fg("dim", `${snippet.placement} · order ${snippet.order} · ${snippet.id}`), width));
-				rows.push(theme.fg("dim", "─".repeat(Math.min(width, 40))));
-				for (const line of snippet.body.split("\n")) {
-					for (const wrapped of wrapTextWithAnsi(line, width)) {
-						rows.push(truncateToWidth(wrapped, width));
-					}
-				}
-				return rows;
-			};
-
-			/**
-			 * Slice `lines` to a scrollable viewport of at most `maxView` lines,
-			 * reserving indicator slots when clipped. Returns the visible lines
-			 * plus the clamped scroll position. When `focusRow` is given, scrolls
-			 * so it stays visible.
-			 */
-			const viewport = (
-				lines: string[],
-				scroll: number,
-				maxView: number,
-				focusRow?: number,
-			): { out: string[]; scroll: number } => {
-				const clipped = lines.length > maxView;
-				const view = clipped ? Math.max(1, maxView - 2) : maxView;
-
-				let s = Math.min(Math.max(0, scroll), Math.max(0, lines.length - view));
-				if (focusRow !== undefined) {
-					if (focusRow < s) s = focusRow;
-					else if (focusRow >= s + view) s = focusRow - view + 1;
-				}
-
-				const visible = lines.slice(s, s + view);
-				if (!clipped) return { out: visible, scroll: s };
-
-				const above = s;
-				const below = lines.length - (s + view);
-				return {
-					out: [
-						above > 0 ? theme.fg("dim", `  ↑ ${above} more`) : "",
-						...visible,
-						below > 0 ? theme.fg("dim", `  ↓ ${below} more`) : "",
-					],
-					scroll: s,
-				};
-			};
-
-			return {
-				render(width: number): string[] {
-					// Reserve lines for: top border, title, blank, blank, hints, bottom border.
-					const maxView = Math.max(5, tui.terminal.rows - 10);
-
-					let content: string[];
-					let title: string;
-					let hints: string;
-					if (mode === "list") {
-						const rows = buildListRows(width);
-						const cursorRow = rows.findIndex((r) => r.itemIndex === cursor);
-						const v = viewport(rows.map((r) => r.text), listScroll, maxView, cursorRow);
-						content = v.out;
-						listScroll = v.scroll;
-						title = "Prompt snippets";
-						hints = "↑↓ navigate • Space toggle • Tab preview • Enter apply • Esc cancel";
-					} else {
-						const snippet = items[cursor];
-						const rows = buildPreviewRows(snippet, width);
-						const v = viewport(rows, previewScroll, maxView);
-						content = v.out;
-						previewScroll = v.scroll;
-						title = `Preview: ${snippet.name}`;
-						hints = "↑↓ scroll • Tab/Esc back";
-					}
-
-					return [
-						theme.fg("accent", "─".repeat(width)),
-						truncateToWidth(` ${theme.fg("accent", theme.bold(title))}`, width),
-						"",
-						...content,
-						"",
-						truncateToWidth(theme.fg("dim", ` ${hints}`), width),
-						theme.fg("accent", "─".repeat(width)),
-					];
-				},
-				invalidate() {},
-				handleInput(data: string) {
-					if (mode === "list") {
-						if (matchesKey(data, Key.up)) {
-							cursor = (cursor - 1 + items.length) % items.length;
-							tui.requestRender();
-						} else if (matchesKey(data, Key.down)) {
-							cursor = (cursor + 1) % items.length;
-							tui.requestRender();
-						} else if (matchesKey(data, Key.space)) {
-							const id = items[cursor].id;
-							if (working.has(id)) working.delete(id);
-							else working.add(id);
-							tui.requestRender();
-						} else if (matchesKey(data, Key.tab)) {
-							mode = "preview";
-							previewScroll = 0;
-							tui.requestRender();
-						} else if (matchesKey(data, Key.enter)) {
-							done(true);
-						} else if (matchesKey(data, Key.escape)) {
-							done(false);
-						}
-					} else {
-						if (matchesKey(data, Key.up)) {
-							previewScroll--;
-							tui.requestRender();
-						} else if (matchesKey(data, Key.down)) {
-							previewScroll++;
-							tui.requestRender();
-						} else if (matchesKey(data, Key.tab) || matchesKey(data, Key.escape)) {
-							mode = "list";
-							tui.requestRender();
-						}
-					}
-				},
-			};
+		const tags = (list: Snippet[]) => list.map((s) => `#${s.slug}`).join(" ");
+		ctx.ui.setWidget(WIDGET, (_tui, theme) => {
+			const lines: string[] = [];
+			if (session.length) lines.push(theme.fg("accent", "◆ session ") + tags(session));
+			if (once.length) lines.push(theme.fg("warning", "▸ next message ") + tags(once));
+			return new Text(lines.join("\n"), 0, 0);
 		});
-
-		if (confirmed) {
-			enabled = working;
-		}
-		updateWidget(ctx);
 	}
 
-	pi.on("session_start", (_event, ctx) => {
-		enabled = new Set();
-		snippets = loadSnippets();
-		if (!existsSync(snippetsDir)) mkdirSync(snippetsDir, { recursive: true });
-		updateWidget(ctx);
-	});
+	/** Set one snippet's mode; returns whether the pinned set changed. */
+	function setMode(slug: string, mode: string): boolean {
+		const wasPinned = pinned.has(slug);
+		next.delete(slug);
+		pinned.delete(slug);
+		if (mode === NEXT) next.add(slug);
+		if (mode === SESSION) pinned.add(slug);
+		return wasPinned !== pinned.has(slug);
+	}
 
-	pi.on("input", async (event, ctx) => {
-		if (enabled.size === 0) return; // continue unchanged
+	async function openMenu(ctx: ExtensionContext): Promise<void> {
+		reload(ctx);
+		if (ctx.mode !== "tui") {
+			ctx.ui.notify("The snippet menu needs the terminal UI. Use /snippets pin|next|unpin <name>.", "warning");
+			return;
+		}
+		if (!snippets.length) {
+			ctx.ui.notify(`No snippets found in ${GLOBAL_DIR}`, "warning");
+			return;
+		}
+		let pinsChanged = false;
+		await ctx.ui.custom<void>((tui, theme, _keys, done) => {
+			const mode = (slug: string) => (pinned.has(slug) ? SESSION : next.has(slug) ? NEXT : OFF);
+			const items: SettingItem[] = snippets.map((s) => ({
+				id: s.slug,
+				label: `#${s.slug}${s.source === "project" ? theme.fg("dim", " (project)") : ""}`,
+				description: s.description ? `${s.description}\n\n${s.body}` : s.body,
+				currentValue: mode(s.slug),
+				values: [OFF, NEXT, SESSION],
+			}));
+			const list = new SettingsList(
+				items,
+				Math.min(items.length + 2, 14),
+				getSettingsListTheme(),
+				(slug, value) => {
+					pinsChanged = setMode(slug, value) || pinsChanged;
+					showWidget(ctx);
+				},
+				() => done(undefined),
+				{ enableSearch: true },
+			);
+			const view = new Container();
+			view.addChild(new Text(theme.fg("accent", theme.bold("Prompt snippets")), 0, 0));
+			view.addChild(new Text(theme.fg("dim", "space/enter: off → next message → whole session · type to search · esc: done"), 0, 0));
+			view.addChild(list);
+			const component: Component & { capturesViewportInput?: boolean } = {
+				capturesViewportInput: list.capturesViewportInput,
+				render: (width) => view.render(width),
+				invalidate: () => view.invalidate(),
+				handleInput: (data) => {
+					list.handleInput(data);
+					tui.requestRender();
+				},
+			};
+			return component;
+		});
+		if (pinsChanged) savePins();
+		showWidget(ctx);
+	}
 
-		snippets = loadSnippets();
-		const active = snippets.filter((s) => enabled.has(s.id));
-		enabled = new Set();
-		updateWidget(ctx);
-
-		if (active.length === 0) return; // all toggled snippets vanished from disk
-
-		const prependBodies = active.filter((s) => s.placement === "prepend").map((s) => s.body);
-		const appendBodies = active.filter((s) => s.placement === "append").map((s) => s.body);
-		return {
-			action: "transform",
-			text: [...prependBodies, event.text, ...appendBodies].join("\n\n"),
-		};
-	});
+	// ── UI entry points ──────────────────────────────────────────────────────
 
 	pi.registerShortcut("alt+s", {
-		description: "Toggle prompt snippets",
-		handler: async (ctx) => {
-			await openMenu(ctx);
+		description: "Prompt snippets: pick rules for the next message or the session",
+		handler: async (ctx) => openMenu(ctx),
+	});
+
+	const SUBCOMMANDS = ["next", "pin", "unpin", "clear", "list"];
+	pi.registerCommand("snippets", {
+		description: "Prompt snippets menu, or: next|pin|unpin <name>, clear, list",
+		getArgumentCompletions: (prefix): AutocompleteItem[] | null => {
+			const [sub, name = ""] = prefix.split(/\s+/, 2);
+			if (!prefix.includes(" ")) {
+				const items = SUBCOMMANDS.filter((c) => c.startsWith(sub)).map((c) => ({ value: `${c} `, label: c }));
+				return items.length ? items : null;
+			}
+			if (!["next", "pin", "unpin"].includes(sub)) return null;
+			const items = snippets
+				.filter((s) => s.slug.startsWith(name))
+				.map((s) => ({ value: `${sub} ${s.slug}`, label: s.slug, description: s.description }));
+			return items.length ? items : null;
+		},
+		handler: async (args, ctx) => {
+			const [sub = "", ...names] = args.trim().split(/\s+/).filter(Boolean);
+			if (!sub) return openMenu(ctx);
+			reload(ctx);
+			if (sub === "list") {
+				const lines = snippets.map((s) => {
+					const state = pinned.has(s.slug) ? "session" : next.has(s.slug) ? "next" : "-";
+					return `#${s.slug}  [${state}]  ${s.description}${s.source === "project" ? "  (project)" : ""}`;
+				});
+				ctx.ui.notify(lines.join("\n") || "No snippets", "info");
+				return;
+			}
+			if (sub === "clear") {
+				const hadPins = pinned.size > 0;
+				next.clear();
+				pinned.clear();
+				if (hadPins) savePins();
+				showWidget(ctx);
+				ctx.ui.notify("All snippets off", "info");
+				return;
+			}
+			if (!["next", "pin", "unpin"].includes(sub) || !names.length) {
+				ctx.ui.notify("Usage: /snippets [next|pin|unpin <name>... | clear | list]", "warning");
+				return;
+			}
+			const unknown = names.filter((n) => !find(n.replace(/^#/, "")));
+			if (unknown.length) {
+				ctx.ui.notify(`Unknown snippet: ${unknown.join(", ")}`, "error");
+				return;
+			}
+			const target = sub === "next" ? NEXT : sub === "pin" ? SESSION : OFF;
+			let pinsChanged = false;
+			for (const n of names) pinsChanged = setMode(n.replace(/^#/, ""), target) || pinsChanged;
+			if (pinsChanged) savePins();
+			showWidget(ctx);
 		},
 	});
 
-	pi.registerCommand("snippets", {
-		description: "Open the prompt snippet toggle menu",
-		handler: async (_args, ctx) => {
-			await openMenu(ctx);
-		},
+	pi.registerMessageRenderer<{ slugs?: string[] }>(RULES_MESSAGE, (message, options, theme) => {
+		const tags = (message.details?.slugs ?? []).map((s) => `#${s}`).join(" ");
+		let text = theme.fg("dim", "▸ snippets ") + tags;
+		if (options.expanded) {
+			const body = typeof message.content === "string" ? message.content : "";
+			text += `\n${theme.fg("dim", body)}`;
+		} else {
+			text += theme.fg("dim", ` (${options.keyHint("app.tools.expand", "to expand")})`);
+		}
+		return new Text(text, options.outputPad, 0);
+	});
+
+	// ── Session lifecycle ────────────────────────────────────────────────────
+
+	pi.on("session_start", (_event, ctx) => {
+		reload(ctx);
+		restorePins(ctx);
+		next.clear();
+		pending = [];
+		showWidget(ctx);
+		if (!ctx.hasUI) return;
+		ctx.ui.addAutocompleteProvider((current) => ({
+			triggerCharacters: ["#"],
+			async getSuggestions(lines, line, col, options) {
+				const token = tagAtCursor((lines[line] ?? "").slice(0, col));
+				if (token === undefined || !snippets.length) return current.getSuggestions(lines, line, col, options);
+				const matches = token ? fuzzyFilter(snippets, token, (s) => `${s.slug} ${s.name}`) : snippets;
+				if (!matches.length) return current.getSuggestions(lines, line, col, options);
+				return {
+					prefix: `#${token}`,
+					items: matches.slice(0, 20).map((s) => ({
+						value: `#${s.slug}`,
+						label: `#${s.slug}`,
+						description: s.description || s.name,
+					})),
+				};
+			},
+			applyCompletion: (lines, line, col, item, prefix) => current.applyCompletion(lines, line, col, item, prefix),
+			shouldTriggerFileCompletion: (lines, line, col) =>
+				current.shouldTriggerFileCompletion?.(lines, line, col) ?? true,
+		}));
+	});
+
+	pi.on("session_tree", (_event, ctx) => {
+		restorePins(ctx);
+		showWidget(ctx);
+	});
+
+	// ── Applying rules ───────────────────────────────────────────────────────
+
+	pi.on("input", (event, ctx) => {
+		if (event.source === "extension") return { action: "continue" };
+		reload(ctx);
+		const { text, slugs } = extractTags(event.text, new Set(snippets.map((s) => s.slug)));
+		const tagged = slugs.length > 0;
+
+		// Only tags, no message: arm them for the next message instead of sending nothing.
+		if (tagged && !text && !event.images?.length) {
+			for (const slug of slugs) setMode(slug, NEXT);
+			showWidget(ctx);
+			ctx.ui.notify(`Next message: ${slugs.map((s) => `#${s}`).join(" ")}`, "info");
+			return { action: "handled" };
+		}
+
+		const chosen = present(new Set([...next, ...slugs]));
+		next.clear();
+		showWidget(ctx);
+		if (!chosen.length) return tagged ? { action: "transform", text } : { action: "continue" };
+
+		// Steering and follow-up messages don't start a run of their own, so
+		// before_agent_start won't see them: put the rules in the text instead.
+		if (event.streamingBehavior) return { action: "transform", text: `${text}\n\n${messageRules(chosen)}` };
+
+		pending = chosen;
+		return tagged ? { action: "transform", text } : { action: "continue" };
+	});
+
+	pi.on("before_agent_start", (event) => {
+		const session = present(pinned);
+		const sections = event.systemPromptOptions?.sections;
+		let systemPrompt: string | undefined;
+		if (sections) {
+			if (session.length) sections[SECTION] = sessionRules(session);
+			else delete sections[SECTION];
+		} else if (session.length) {
+			systemPrompt = `${event.systemPrompt}\n\n<${SECTION}>\n${sessionRules(session)}\n</${SECTION}>`;
+		}
+
+		const rules = event.messageType === "user" ? pending : [];
+		pending = [];
+		if (!rules.length) return systemPrompt ? { systemPrompt } : undefined;
+		return {
+			...(systemPrompt ? { systemPrompt } : {}),
+			message: {
+				customType: RULES_MESSAGE,
+				content: messageRules(rules),
+				display: true,
+				details: { slugs: rules.map((r) => r.slug) },
+			},
+		};
 	});
 }

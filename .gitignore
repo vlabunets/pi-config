@@ -15,6 +15,7 @@
 !/agent-presets/
 !/extensions/
 !/skills/
+!/prompts/
 
 # Kept private on purpose (already excluded by /* above, listed for clarity):
 #   auth.json, mcp-auth.json   credentials

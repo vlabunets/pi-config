@@ -14,7 +14,7 @@ My [pi](https://github.com/earendil-works/pi) agent directory (`~/.pi/agent`): a
 
 - `interactive-subagents/` — async, interactive subagents in Rex / tmux panes; vendored from [pi-interactive-subagents](https://github.com/amosblomqvist/pi-interactive-subagents) with local changes (Rex integration, custom loadouts)
 - `observational-memory/` — tiered session memory with deterministic compaction (`/om on`); vendored from [pi-observational-memory](https://github.com/amosblomqvist/pi-observational-memory)
-- `prompt-snippets/` — small, reusable behavior rules toggled onto a message before sending (`alt+s`); reset after send
+- `prompt-snippets/` — short behavior rules for one message or the whole session: `#tags` with autocomplete, `alt+s` / `/snippets` menu, pins kept per session (system prompt section); project rules from `.pi/snippets/` in trusted projects
 - `router/` — `delegate` tool routing isolated tasks across `local`, `copilot`, and `claude` tiers
 - `tokyo-footer.ts` — custom Tokyo Night footer with context/cost stats and GitHub Copilot premium quota
 
@@ -24,7 +24,7 @@ My [pi](https://github.com/earendil-works/pi) agent directory (`~/.pi/agent`): a
 - `obsidian-zettel-summary/` — save conversation summaries as atomic, linked Zettelkasten notes in Obsidian
 - `pi-config/` — develop and maintain this config: layout map, workflows for extensions/skills/MCP/models, and `scripts/check.sh` sanity checks
 - `pdf-reader/` — read local PDFs (lecture notes, papers, scans, forms, CAD drawings): `scripts/triage.py` sizes a PDF up, says which pages to render, and crops large sheets into tiles; text, search and rendering use Poppler (`brew install poppler`)
-- `sonarqube-findings/` — collect SonarQube Cloud findings for a branch/PR (gate, issues, hotspots, coverage, or a local check), with severity mapping and triage rules; used by the `pre-pr-review` and `sonar-quality-gate` snippets
+- `sonarqube-findings/` — collect SonarQube Cloud findings for a branch/PR (gate, issues, hotspots, coverage, or a local check), with severity mapping and triage rules; used by the `/pre-pr-review` and `/sonar-quality-gate` templates
 - `web-debug/` — a playbook for debugging frontend issues through the `playwright` and `chrome-devtools` MCP servers
 
 ### Subagents
@@ -32,9 +32,10 @@ My [pi](https://github.com/earendil-works/pi) agent directory (`~/.pi/agent`): a
 - `agents/` — `worker` (default implementer, overrides the bundled one; Copilot GPT-6.2 Sol), `claude-worker` (Claude Code CLI implementer), `reviewer` (pre-PR reviewer, read-only), `scout` (recon)
 - `agent-presets/` — scout variants: `scout.local` (LM Studio), `scout.gpt` (Copilot GPT-6 Luna), `scout.mai` (Copilot MAI Code 2 Flash), `scout.claude` (Copilot Claude Haiku 5.5); switch with `pi-preset-scout <name>`, which symlinks the chosen file over `agents/scout.md`
 
-### Prompt snippets
+### Prompt snippets and templates
 
-`extensions/prompt-snippets/snippets/`: ask-questions, verify-not-assume, delegate-exploration, session-kickoff, orchestrator-mode, diagnose-report, claude-worker, pi-worker, pre-pr-review, sonar-quality-gate, obsidian-note.
+- Snippets (`extensions/prompt-snippets/snippets/`, used as `#tag`): kickoff, ask, verify, delegate, orchestrate, diagnose.
+- Prompt templates (`prompts/`, used as `/name`): `pre-pr-review [what the change does]`, `sonar-quality-gate [focus]`, `obsidian-note <url or text>`, `claude-worker [task]`, `pi-worker [task]`.
 
 ### MCP servers (`mcp.json`, not committed)
 
@@ -55,7 +56,7 @@ atlassian, figma, sonarqube (local jar in `mcp-servers/sonarqube/`, read-only), 
 
 Extension-local npm deps: run `npm install` in `interactive-subagents/` and `observational-memory/`.
 
-System tools: `brew install yt-dlp ffmpeg` (pi-web-access video frames), Python 3 (analyze-sessions, pdf-reader; stdlib only), Poppler (`brew install poppler`; pdf-reader), Java (SonarQube MCP), Claude Code CLI (`claude-worker`, `claude` router tier), a `git-base-branch` script on `PATH` (`reviewer` agent, `pre-pr-review` snippet), the `obsidian` CLI (`obsidian-zettel-summary`).
+System tools: `brew install yt-dlp ffmpeg` (pi-web-access video frames), Python 3 (analyze-sessions, pdf-reader; stdlib only), Poppler (`brew install poppler`; pdf-reader), Java (SonarQube MCP), Claude Code CLI (`claude-worker`, `claude` router tier), a `git-base-branch` script on `PATH` (`reviewer` agent, `/pre-pr-review` template), the `obsidian` CLI (`obsidian-zettel-summary`).
 
 ## Git
 

@@ -33,7 +33,8 @@ Map task → doc: settings keys → `settings.md`; extension API/events/`ctx.ui`
 | `extensions/{interactive-subagents,observational-memory}` | vendored MIT code (see `NOTICE.md`) | keep their `LICENSE`; pull upstream changes by hand |
 | `skills/<name>/SKILL.md` | skills | |
 | `agents/*.md`, `agent-presets/*.md` | subagent definitions (frontmatter: name, description, tools, model, thinking, …) | presets = variants (`.local` / `.gpt` / `.mai` / `.claude`), switched by `pi-preset-scout` |
-| `extensions/prompt-snippets/snippets/*.md` | toggleable rules (`alt+s`) | frontmatter: name, description, placement, order |
+| `extensions/prompt-snippets/snippets/*.md` | one-rule snippets, used as `#tag`, `alt+s`, `/snippets` | frontmatter: name, description, order; file name = tag |
+| `prompts/*.md` | prompt templates, used as `/name [args]` | frontmatter: description, argument-hint; `$@`, `${1:-default}` |
 | `mcp-servers/` | local MCP server binaries (sonarqube jar) | |
 | `npm/`, `git/` | installed `packages` from settings | managed by `pi install` — don't edit |
 | `install/` | managed pi releases | managed — don't edit |
@@ -68,7 +69,11 @@ Map task → doc: settings keys → `settings.md`; extension API/events/`ctx.ui`
 - Final message format must stand alone — subagents have no parent context.
 
 ### Add a prompt snippet
-- `extensions/prompt-snippets/snippets/<slug>.md` with `name`, `description`, `placement: prepend|append`, `order`. One rule per snippet, a few lines max.
+- `extensions/prompt-snippets/snippets/<tag>.md` (lowercase, digits, dashes) with `name`, `description`, `order`. One rule, a few lines; it is used as `#<tag>` for one message or pinned for the session. Project-only rules go in `<project>/.pi/snippets/` (loaded when the project is trusted).
+- Run `node --test extensions/prompt-snippets/core.test.ts` after changing the extension's code.
+
+### Add a prompt template
+- A whole workflow (several steps, a report format) is a template, not a snippet: `prompts/<name>.md` with `description` and optional `argument-hint`; use `$@` / `${@:-default}` for what the user types after `/name`. See the bundled `prompt-templates.md`. Run `/reload` after adding one.
 
 ### Add/modify an MCP server
 - Back up `mcp.json` first. Follow `mcp.md` for schema; secrets go in the macOS keychain via `!security find-generic-password …` (existing convention), env vars, or OAuth — never inline.
